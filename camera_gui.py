@@ -126,6 +126,9 @@ class CameraGUI(QMainWindow):
         self.info_timer = QTimer()
         self.info_timer.timeout.connect(self.update_info)
         self.info_timer.start(1000)  # هر ثانیه
+        
+        # شروع خودکار استریم بعد از راه‌اندازی کامل UI
+        QTimer.singleShot(500, self.auto_start_streaming)
     
     def init_ui(self):
         """راه‌اندازی رابط کاربری"""
@@ -171,27 +174,18 @@ class CameraGUI(QMainWindow):
                 text-align: center;
             }
         """)
-        self.video_label.setText("🎥\n\nبرای شروع نمایش استریم\n'شروع استریم' را کلیک کنید")
+        self.video_label.setText("🎥\n\nدر حال اتصال به دوربین...\n\nاستریم خودکار شروع می‌شود")
         self.video_label.setAlignment(Qt.AlignCenter)
         
         layout.addWidget(self.video_label)
         
-        # کنترل‌های ویدیو
+        # کنترل‌های ویدیو - فقط دکمه عکس‌گیری
         video_controls = QHBoxLayout()
-        
-        self.start_btn = QPushButton("🎬 شروع استریم")
-        self.start_btn.clicked.connect(self.start_streaming)
-        
-        self.stop_btn = QPushButton("⏹️ توقف استریم")
-        self.stop_btn.clicked.connect(self.stop_streaming)
-        self.stop_btn.setEnabled(False)
         
         self.snapshot_btn = QPushButton("📸 گرفتن عکس")
         self.snapshot_btn.clicked.connect(self.take_snapshot)
         self.snapshot_btn.setEnabled(False)
         
-        video_controls.addWidget(self.start_btn)
-        video_controls.addWidget(self.stop_btn)
         video_controls.addWidget(self.snapshot_btn)
         
         layout.addLayout(video_controls)
@@ -351,6 +345,26 @@ class CameraGUI(QMainWindow):
             cursor.movePosition(cursor.Down, cursor.KeepAnchor)
             cursor.removeSelectedText()
     
+    def auto_start_streaming(self):
+        """شروع خودکار استریم هنگام راه‌اندازی برنامه"""
+        self.log_message("شروع خودکار استریم...")
+        self.start_streaming()
+        
+        # اگر اتصال برقرار نشد، هر 10 ثانیه دوباره سعی کن
+        self.retry_timer = QTimer()
+        self.retry_timer.timeout.connect(self.retry_connection)
+        self.retry_timer.start(10000)  # هر 10 ثانیه
+    
+    def retry_connection(self):
+        """تلاش مجدد برای اتصال"""
+        if not self.is_streaming:
+            self.log_message("تلاش مجدد برای اتصال...")
+            self.start_streaming()
+        else:
+            # اگر استریم فعال است، تایمر را متوقف کن
+            if hasattr(self, 'retry_timer'):
+                self.retry_timer.stop()
+    
     def start_streaming(self):
         """شروع استریم"""
         if self.is_streaming:
@@ -367,9 +381,7 @@ class CameraGUI(QMainWindow):
         # شروع استریم
         self.stream_thread.start_stream()
         
-        # تغییر وضعیت دکمه‌ها
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
+        # فعال کردن دکمه عکس‌گیری
         self.snapshot_btn.setEnabled(True)
         
         self.is_streaming = True
@@ -377,7 +389,7 @@ class CameraGUI(QMainWindow):
         self.start_time = time.time()
     
     def stop_streaming(self):
-        """توقف استریم"""
+        """توقف استریم - فقط برای بستن برنامه"""
         if not self.is_streaming:
             return
         
@@ -387,18 +399,11 @@ class CameraGUI(QMainWindow):
             self.stream_thread.stop_stream()
             self.stream_thread = None
         
-        # تغییر وضعیت دکمه‌ها
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
+        # غیرفعال کردن دکمه عکس‌گیری
         self.snapshot_btn.setEnabled(False)
-        
-        # پاک کردن نمایش
-        self.video_label.clear()
-        self.video_label.setText("🎥\n\nاستریم متوقف شد\n\nبرای شروع مجدد 'شروع استریم' را کلیک کنید")
         
         self.is_streaming = False
         self.status_label.setText("❌ قطع")
-        self.status_bar.showMessage("آماده")
     
     def update_frame(self, frame):
         """به‌روزرسانی فریم نمایش"""
